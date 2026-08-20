@@ -1,0 +1,15 @@
+{
+  "name": "smail-rendering",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Renderar SMaiL:s SoMe-reels: Chromium ritar overlaggen, ffmpeg kodar filmen.",
+  "scripts": {
+    "overlagg": "node overlagg.mjs spec.json",
+    "rendera": "node rendera.mjs spec.json",
+    "allt": "node overlagg.mjs spec.json && node rendera.mjs spec.json"
+  },
+  "dependencies": {
+    "playwright": "^1.47.0"
+  }
+}
