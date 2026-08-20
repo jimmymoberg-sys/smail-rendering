@@ -151,10 +151,15 @@
     var hojd = Math.max(2, Math.round(W / 180));
     for (var i = 0; i < antal; i++) {
       var x = m + i * (bredd + mellan);
-      ctx.fillStyle = 'rgba(230,222,211,0.30)';
+      // Dämpad. Vid många klipp blir raden annars en rispig streckrad som
+      // konkurrerar med typografin i stället för att bara ligga där.
+      ctx.fillStyle = 'rgba(230,222,211,0.18)';
       ctx.fillRect(x, y, bredd, hojd);
       var fyll = (i < index) ? 1 : (i === index ? klamp(andel === undefined ? 1 : andel, 0, 1) : 0);
-      if (fyll > 0) { ctx.fillStyle = stil.farger.sandsten; ctx.fillRect(x, y, bredd * fyll, hojd); }
+      if (fyll > 0) {
+        ctx.fillStyle = 'rgba(230,222,211,0.72)';
+        ctx.fillRect(x, y, bredd * fyll, hojd);
+      }
     }
   }
 
@@ -405,6 +410,37 @@
       ctx.stroke();
 
       y = cy + d / 2 + Math.round(H * 0.058);
+    } else if (klipp.rubrik) {
+      /*
+       * Saknas porträtt ritas ett MONOGRAM i stället — initialerna i en hårfin
+       * cirkel. Utan något ankare uppe tappar kortet sin tyngdpunkt och texten
+       * flyter. Reserven gör att kortet fungerar redan innan porträtt finns
+       * i databasen (profiles har ingen bildkolumn i dag).
+       */
+      var dm = Math.round(W * 0.30);
+      var mx = Math.round(W / 2);
+      var my = y + Math.round(dm / 2);
+
+      ctx.strokeStyle = mork ? 'rgba(230,222,211,0.30)' : 'rgba(11,18,19,0.20)';
+      ctx.lineWidth = Math.max(1, Math.round(W / 1080));
+      ctx.beginPath();
+      ctx.arc(mx, my, dm / 2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      var delar = String(klipp.rubrik).trim().split(/\s+/);
+      var initialer = (delar[0] ? delar[0][0] : '') +
+        (delar.length > 1 ? delar[delar.length - 1][0] : '');
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      satt(ctx, stil, 'display', 300, 0.105, W);
+      ctx.fillStyle = f.text;
+      ctx.fillText(initialer.toUpperCase(), mx, my + Math.round(W * 0.004));
+      ctx.restore();
+      ctx.textBaseline = 'alphabetic';
+
+      y = my + dm / 2 + Math.round(H * 0.058);
     } else {
       y = Math.round(H * 0.40);
     }
