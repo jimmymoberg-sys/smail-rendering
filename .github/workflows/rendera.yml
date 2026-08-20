@@ -67,7 +67,20 @@ jobs:
       - name: Rita överläggen
         run: node overlagg.mjs spec.json
 
-      # ffmpeg-halvan. ffmpeg finns förinstallerat på ubuntu-latest.
+      # ★★ ffmpeg är INTE förinstallerat på ubuntu-latest.
+      # Det fanns på Ubuntu 22.04 men togs bort ur 24.04-avbildningen, som är
+      # vad ubuntu-latest pekar på. Felet blir "spawn ffmpeg ENOENT" i steget
+      # nedan, vilket inte säger något om att paketet saknas.
+      # Playwrights egen ffmpeg (i ~/.cache/ms-playwright) duger inte — den är
+      # en avskalad build för skärminspelning, utan h264.
+      - name: Installera ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+
+      # ffmpeg-halvan.
       - name: Rendera filmen
         run: node rendera.mjs spec.json
 
