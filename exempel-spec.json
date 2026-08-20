@@ -1,0 +1,41 @@
+{
+  "filnamn": "hedensbergsvagen-3.mp4",
+  "bredd": 1080,
+  "hojd": 1920,
+  "logotypUrl": "https://udqwjtbejvfiydyioeyf.supabase.co/storage/v1/object/public/branding/logotyp-vit-1786393274562-SkandiaMaklarna_realestate_NEG.png",
+  "klipp": [
+    {
+      "fotoUrl": "https://mp1.skm.quedro.com/eaimages/74/3f86c-40859-1f55a-12868-a24ec-8e7fd-fb9e2-04bb4/581a4-c7116-91ece-fad01-92c14-7bf30-1d098-86a0f.jpg",
+      "sekunder": 3.2,
+      "zoomFran": 1.0,
+      "zoomTill": 1.1,
+      "fx": 0.5,
+      "fy": 0.55,
+      "etikett": "Berthaga, Uppsala",
+      "rubrik": "Herrgardskansla i hjartat av Berthaga",
+      "overgang": "fade"
+    },
+    {
+      "fotoUrl": "https://mp1.skm.quedro.com/eaimages/74/3f86c-40859-1f55a-12868-a24ec-8e7fd-fb9e2-04bb4/99d62-8b4f2-2a94f-3bf15-fe701-60cbf-3c92f-8f706.jpg",
+      "sekunder": 3.0,
+      "zoomFran": 1.08,
+      "zoomTill": 1.0,
+      "fx": 0.5,
+      "fy": 0.5,
+      "rubrik": "Tradgard i sodervage",
+      "underrad": "Uteplats, vaxthus och plats for hela familjen.",
+      "overgang": "fade"
+    },
+    {
+      "fotoUrl": "https://mp1.skm.quedro.com/eaimages/74/3f86c-40859-1f55a-12868-a24ec-8e7fd-fb9e2-04bb4/c3f13-ced6e-bfa43-3521d-bc2c8-50d07-a70b8-32785.jpg",
+      "sekunder": 3.4,
+      "zoomFran": 1.0,
+      "zoomTill": 1.12,
+      "fx": 0.45,
+      "fy": 0.5,
+      "rubrik": "Kok med matplats och utsikt",
+      "underrad": "Sald fore visning.",
+      "overgang": "fade"
+    }
+  ]
+}
