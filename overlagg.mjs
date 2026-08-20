@@ -55,7 +55,7 @@ await sidan.setContent(sida, { waitUntil: 'networkidle' });
  * och felet upptäcks först när någon tittar på den färdiga filmen. Bättre att
  * hela körningen dör här med ett tydligt meddelande.
  */
-const typsnittOk = await sidan.evaluate(async () => {
+const typsnittOk = await sidan.evaluate(async (stil) => {
   /*
    * ★★ CANVAS TRIGGAR INTE NEDLADDNING AV WEBBTYPSNITT.
    * Ett snitt som bara är deklarerat i CSS men aldrig används av ett DOM-element
@@ -63,12 +63,16 @@ const typsnittOk = await sidan.evaluate(async () => {
    * pågående att vänta på) och check() svarar false hur länge man än väntar.
    * ctx.font = '... Jost' räcker inte heller — canvas är inte DOM.
    * Varje snitt och vikt måste begäras EXPLICIT med document.fonts.load().
+   *
+   * ★ Listan kommer från MOTORN, inte härifrån. Hårdkodas den här glöms nya
+   *   vikter bort när motorn ändras — t.ex. hjältesiffrans 300 200px Jost, som
+   *   tillkom med faktakortet och tyst hade ritats i Arial.
    */
-  const begar = ['300 80px Jost', '500 30px Jost', '400 40px Inter'];
+  const begar = window.SomeMotor.typsnittSomBehovs(stil);
   await Promise.all(begar.map((f) => document.fonts.load(f)));
   await document.fonts.ready;
   return begar.every((f) => document.fonts.check(f));
-});
+}, spec.stil || {});
 
 if (!typsnittOk) {
   await webblasare.close();
@@ -76,47 +80,59 @@ if (!typsnittOk) {
   process.exit(2);
 }
 
-// Loggan hämtas som data-URI så att Chromium slipper ett nätverksanrop mitt i ritningen.
-let logotypDataUri = null;
-if (spec.logotypUrl) {
+// Bilderna hämtas som data-URI så att Chromium slipper nätverksanrop mitt i
+// ritningen. Servern hämtar dem utan CORS-hinder — CORS finns bara i webbläsaren.
+const somDataUri = async (url, vad) => {
+  if (!url) return null;
   try {
-    const svar = await fetch(spec.logotypUrl);
-    if (svar.ok) {
-      const buf = Buffer.from(await svar.arrayBuffer());
-      const typ = svar.headers.get('content-type') || 'image/png';
-      logotypDataUri = `data:${typ};base64,${buf.toString('base64')}`;
-    }
+    const svar = await fetch(url);
+    if (!svar.ok) throw new Error('HTTP ' + svar.status);
+    const buf = Buffer.from(await svar.arrayBuffer());
+    const typ = svar.headers.get('content-type') || 'image/png';
+    return `data:${typ};base64,${buf.toString('base64')}`;
   } catch (fel) {
-    console.warn('Loggan kunde inte hämtas, fortsätter utan:', fel.message);
+    console.warn(`${vad} kunde inte hämtas, fortsätter utan:`, fel.message);
+    return null;
   }
-}
+};
+
+const logotypDataUri = await somDataUri(spec.logotypUrl, 'Loggan');
+const portrattDataUri = await somDataUri(spec.portrattUrl, 'Porträttet');
+
+/*
+ * Bilderna laddas EN gång i sidan, inte per klipp. Med nio klipp blev det
+ * annars nio identiska avkodningar av samma logga.
+ */
+await sidan.evaluate(async ({ logga, portratt }) => {
+  const ladda = (kalla) => new Promise((klar) => {
+    if (!kalla) return klar(null);
+    const bild = new Image();
+    bild.onload = () => klar(bild);
+    bild.onerror = () => klar(null);
+    bild.src = kalla;
+  });
+  window.__logga = await ladda(logga);
+  window.__portratt = await ladda(portratt);
+}, { logga: logotypDataUri, portratt: portrattDataUri });
 
 const klipp = spec.klipp || [];
 const filer = [];
 
 for (let i = 0; i < klipp.length; i++) {
-  await sidan.evaluate(async ({ k, index, antal, B, H, logga }) => {
+  await sidan.evaluate(({ k, index, antal, B, H, stil }) => {
     const duk = document.getElementById('duk');
     const ctx = duk.getContext('2d');
-
-    let logotypBild = null;
-    if (logga) {
-      logotypBild = await new Promise((klar) => {
-        const bild = new Image();
-        bild.onload = () => klar(bild);
-        bild.onerror = () => klar(null);
-        bild.src = logga;
-      });
-    }
 
     window.SomeMotor.ritaOverlagg(ctx, k, {
       antalKlipp: antal,
       index: index,
       andel: 1,
-      logotypBild: logotypBild,
-      logotypProportion: logotypBild ? logotypBild.width / logotypBild.height : 5.1
+      stil: stil,
+      logotypBild: window.__logga,
+      logotypProportion: window.__logga ? window.__logga.width / window.__logga.height : 5.1,
+      portrattBild: window.__portratt
     }, B, H);
-  }, { k: klipp[i], index: i, antal: klipp.length, B, H, logga: logotypDataUri });
+  }, { k: klipp[i], index: i, antal: klipp.length, B, H, stil: spec.stil || {} });
 
   const namn = `overlagg-${String(i).padStart(2, '0')}.png`;
   const sokvag = join(UT, namn);
