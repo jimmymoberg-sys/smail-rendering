@@ -56,8 +56,18 @@ await sidan.setContent(sida, { waitUntil: 'networkidle' });
  * hela körningen dör här med ett tydligt meddelande.
  */
 const typsnittOk = await sidan.evaluate(async () => {
+  /*
+   * ★★ CANVAS TRIGGAR INTE NEDLADDNING AV WEBBTYPSNITT.
+   * Ett snitt som bara är deklarerat i CSS men aldrig används av ett DOM-element
+   * hämtas aldrig hem. document.fonts.ready resolvar direkt (det finns inget
+   * pågående att vänta på) och check() svarar false hur länge man än väntar.
+   * ctx.font = '... Jost' räcker inte heller — canvas är inte DOM.
+   * Varje snitt och vikt måste begäras EXPLICIT med document.fonts.load().
+   */
+  const begar = ['300 80px Jost', '500 30px Jost', '400 40px Inter'];
+  await Promise.all(begar.map((f) => document.fonts.load(f)));
   await document.fonts.ready;
-  return document.fonts.check('300 80px Jost') && document.fonts.check('400 40px Inter');
+  return begar.every((f) => document.fonts.check(f));
 });
 
 if (!typsnittOk) {
