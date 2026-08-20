@@ -44,8 +44,24 @@ jobs:
         run: printf '%s' "$SPEC" > spec.json
 
       - name: Kontrollera att specen är giltig JSON
+        # ★ --input-type=commonjs är INTE valfritt. package.json säger
+        # "type": "module", och då körs även node -e som ESM, där require()
+        # inte finns. Utan flaggan dör kontrollen på sin egen första rad
+        # med exit 1 — vilket ser ut som att specen vore trasig fast den är hel.
         run: |
-          node -e "const s=require('./spec.json'); if(!s.klipp||!s.klipp.length){console.error('Specen saknar klipp');process.exit(2)} console.log('Spec OK:',s.klipp.length,'klipp')"
+          node --input-type=commonjs -e "
+            const fs = require('fs');
+            const rå = fs.readFileSync('./spec.json', 'utf8');
+            let s;
+            try { s = JSON.parse(rå); }
+            catch (e) {
+              console.error('Specen är inte giltig JSON:', e.message);
+              console.error('Första 300 tecknen:', rå.slice(0, 300));
+              process.exit(2);
+            }
+            if (!s.klipp || !s.klipp.length) { console.error('Specen saknar klipp'); process.exit(2); }
+            console.log('Spec OK:', s.klipp.length, 'klipp,', rå.length, 'tecken');
+          "
 
       # Chromium-halvan. Avbryter med flit om Jost inte laddat.
       - name: Rita överläggen
