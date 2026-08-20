@@ -80,9 +80,10 @@ jobs:
           ffmpeg -version | head -1
           ffprobe -version | head -1
 
-      # ffmpeg-halvan.
+      # ffmpeg-halvan. Filnamnet skickas med som andra argument så att det
+      # blir samma namn hela vägen till SFTP-uppladdningen.
       - name: Rendera filmen
-        run: node rendera.mjs spec.json
+        run: node rendera.mjs spec.json "${{ inputs.filnamn }}"
 
       - name: Visa resultatet
         run: ls -la ut/ && ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "ut/${{ inputs.filnamn }}"
