@@ -22,6 +22,15 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+/*
+ * ★ Motorn importeras för EN sak: att fråga vilka roller som är grafiska kort.
+ * Listan får inte dupliceras här — läggs ett fjärde korttyp till i motorn ska
+ * renderaren följa med automatiskt. Filen är inte en ES-modul; den sätter
+ * globalThis.SomeMotor när den körs.
+ */
+await import('./motor/some-motor.js');
+const SomeMotor = globalThis.SomeMotor;
+
 const kor = promisify(execFile);
 const HAR = dirname(fileURLToPath(import.meta.url));
 const UT = join(HAR, 'ut');
@@ -79,8 +88,36 @@ for (let i = 0; i < klipp.length; i++) {
   const langd = k.sekunder || 3;
   const rutor = Math.round(langd * FPS);
 
-  const foto = await hamtaFoto(k.fotoUrl, i);
   const overlagg = join(UT, `overlagg-${String(i).padStart(2, '0')}.png`);
+  const del = join(TMP, `del-${String(i).padStart(2, '0')}.mp4`);
+
+  /*
+   * ★★ KORTKLIPP HAR INGET FOTO.
+   * faktakort/budskapskort/maklarkort ritas med heltäckande bakgrund av motorn,
+   * så PNG:en ÄR hela bildrutan. Här får varken foto hämtas eller Ken Burns
+   * köras — försöker man ändå hämta k.fotoUrl dör körningen på en URL som
+   * aldrig fanns. Motorn äger listan över vilka roller som är kort.
+   */
+  if (SomeMotor.arKort(k.roll)) {
+    await ffmpeg([
+      '-framerate', String(FPS),
+      '-loop', '1',
+      '-i', overlagg,
+      '-vf', `scale=${B}:${H},format=yuv420p`,
+      '-c:v', 'libx264',
+      '-preset', 'medium',
+      '-crf', '19',
+      '-pix_fmt', 'yuv420p',
+      '-r', String(FPS),
+      '-t', String(langd),
+      del
+    ]);
+    delar.push(del);
+    console.log(`Klipp ${i + 1}/${klipp.length} renderat som kort (${langd}s, ${k.roll}).`);
+    continue;
+  }
+
+  const foto = await hamtaFoto(k.fotoUrl, i);
 
   const zoomFran = k.zoomFran === undefined ? 1.0 : k.zoomFran;
   const zoomTill = k.zoomTill === undefined ? 1.12 : k.zoomTill;
@@ -88,8 +125,6 @@ for (let i = 0; i < klipp.length; i++) {
   // zoomar ffmpeg mot övre vänstra hörnet i stället för mot motivet.
   const fx = k.fx === undefined ? 0.5 : k.fx;
   const fy = k.fy === undefined ? 0.5 : k.fy;
-
-  const del = join(TMP, `del-${String(i).padStart(2, '0')}.mp4`);
 
   // Filtergrafen byggs som tre kedjor separerade med semikolon. Kommatecken
   // binder ihop filter INOM en kedja, semikolon skiljer kedjor åt — blandas de
