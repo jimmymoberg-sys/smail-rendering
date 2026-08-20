@@ -127,7 +127,13 @@ for (let i = 0; i < klipp.length; i++) {
   console.log(`Klipp ${i + 1}/${klipp.length} renderat (${langd}s).`);
 }
 
-const slutfil = join(UT, spec.filnamn || 'reel.mp4');
+// ★ Filnamnet kan komma från TVÅ håll: arbetsflödets inputs.filnamn (som
+// efterföljande steg och SFTP-uppladdningen använder) och spec.filnamn.
+// ARBETSFLÖDETS namn vinner — annars renderas filmen under ett namn och
+// letas upp under ett annat, och felet blir "No such file or directory"
+// i ett steg som ser helt orelaterat ut.
+const utFilnamn = process.argv[3] || spec.filnamn || 'reel.mp4';
+const slutfil = join(UT, utFilnamn);
 
 if (delar.length === 1) {
   await ffmpeg(['-i', delar[0], '-c', 'copy', '-movflags', '+faststart', slutfil]);
