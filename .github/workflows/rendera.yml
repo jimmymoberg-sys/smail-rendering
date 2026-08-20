@@ -1,0 +1,95 @@
+name: rendera
+
+# Startas av n8n via workflow_dispatch. Ingen push-trigger med flit — repot ska
+# aldrig rendera bara för att någon rättar en kommentar.
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Hela specen som en JSON-STRÄNG (inte objekt — GitHub tar inte objekt)'
+        required: true
+        type: string
+      filnamn:
+        description: 'Filnamn för den färdiga MP4:an, t.ex. hedensbergsvagen-3.mp4'
+        required: true
+        type: string
+      kvittens:
+        description: 'Webhook-URL som ska pingas när filmen ligger uppe (valfri)'
+        required: false
+        type: string
+
+jobs:
+  rendera:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Hämta koden
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installera beroenden
+        run: npm install --no-audit --no-fund
+
+      - name: Installera Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Skriv specen till fil
+        env:
+          SPEC: ${{ inputs.spec }}
+        run: printf '%s' "$SPEC" > spec.json
+
+      - name: Kontrollera att specen är giltig JSON
+        run: |
+          node -e "const s=require('./spec.json'); if(!s.klipp||!s.klipp.length){console.error('Specen saknar klipp');process.exit(2)} console.log('Spec OK:',s.klipp.length,'klipp')"
+
+      # Chromium-halvan. Avbryter med flit om Jost inte laddat.
+      - name: Rita överläggen
+        run: node overlagg.mjs spec.json
+
+      # ffmpeg-halvan. ffmpeg finns förinstallerat på ubuntu-latest.
+      - name: Rendera filmen
+        run: node rendera.mjs spec.json
+
+      - name: Visa resultatet
+        run: ls -la ut/ && ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "ut/${{ inputs.filnamn }}"
+
+      - name: Ladda upp till wasafast.se
+        env:
+          VARD: ${{ secrets.SFTP_VARD }}
+          ANVANDARE: ${{ secrets.SFTP_ANVANDARE }}
+          LOSENORD: ${{ secrets.SFTP_LOSENORD }}
+          FILNAMN: ${{ inputs.filnamn }}
+        run: |
+          if [ -z "$VARD" ] || [ -z "$ANVANDARE" ] || [ -z "$LOSENORD" ]; then
+            echo "AVBROTT: en eller flera SFTP-secrets saknas eller är felstavade."
+            echo "Förväntade namn: SFTP_VARD, SFTP_ANVANDARE, SFTP_LOSENORD"
+            exit 2
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          sshpass -p "$LOSENORD" sftp -o StrictHostKeyChecking=no -o BatchMode=no "$ANVANDARE@$VARD" <<EOF
+          -mkdir /www/smail/some
+          put ut/$FILNAMN /www/smail/some/$FILNAMN
+          bye
+          EOF
+          echo "Uppladdad: https://wasafast.se/smail/some/$FILNAMN"
+
+      # Kvittensen är hur n8n får veta att det gick vägen. Utan den vet flödet
+      # ingenting — workflow_dispatch svarar 204 utan kropp direkt.
+      - name: Kvittera till n8n
+        if: ${{ inputs.kvittens != '' }}
+        run: |
+          curl -sS -X POST "${{ inputs.kvittens }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"ok\":true,\"filnamn\":\"${{ inputs.filnamn }}\",\"url\":\"https://wasafast.se/smail/some/${{ inputs.filnamn }}\",\"korning\":\"${{ github.run_id }}\"}"
+
+      - name: Kvittera fel till n8n
+        if: ${{ failure() && inputs.kvittens != '' }}
+        run: |
+          curl -sS -X POST "${{ inputs.kvittens }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"ok\":false,\"filnamn\":\"${{ inputs.filnamn }}\",\"korning\":\"${{ github.run_id }}\",\"logg\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
