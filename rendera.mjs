@@ -111,6 +111,15 @@ for (let i = 0; i < klipp.length; i++) {
 
   await ffmpeg([
     '-i', foto,          // ★ INGET -loop 1 — se fälla 1
+    // ★★ FÄLLA 3, MOTSATSEN TILL FÄLLA 1: överlägget MÅSTE loopas.
+    // En PNG matas annars in som EN bildruta vid tid noll. `fade=in` gör den
+    // rutan helt genomskinlig, och eftersom ingen andra ruta finns upprepar
+    // overlay-filtret den genomskinliga rutan genom HELA klippet — hela
+    // överlägget blir osynligt utan att något felmeddelande visas.
+    // Fotot får inte loopas (zoompan), överlägget måste. De ser lika ut men är
+    // olika problem.
+    '-framerate', String(FPS),
+    '-loop', '1',
     '-i', overlagg,
     '-filter_complex', filter,
     '-map', '[v]',
