@@ -1,0 +1,120 @@
+name: bild
+
+# ★ EGET arbetsflöde med flit. Stillbilder hade kunnat läggas som en gren i
+# rendera.yml, men den kedjan är bevisad grön och varje villkorssteg i den är
+# en ny chans att spräcka något som fungerar. Ett separat flöde kan inte
+# påverka videorenderingen alls.
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Hela specen som en JSON-STRÄNG (inte objekt — GitHub tar inte objekt)'
+        required: true
+        type: string
+      filnamn:
+        description: 'Namn på FÖRSTA bilden, används i kvittensen. Varje bild har eget filnamn i specen.'
+        required: true
+        type: string
+      kvittens:
+        description: 'Webhook-URL som pingas när bilderna ligger uppe (valfri)'
+        required: false
+        type: string
+      inlagg:
+        description: 'some_inlagg.id — följer med tillbaka i kvittensen så rätt rad kan uppdateras'
+        required: false
+        type: string
+
+jobs:
+  bild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Hämta koden
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installera beroenden
+        run: npm install --no-audit --no-fund
+
+      - name: Installera Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Skriv specen till fil
+        env:
+          SPEC: ${{ inputs.spec }}
+        run: printf '%s' "$SPEC" > spec.json
+
+      - name: Kontrollera att specen är giltig JSON
+        # ★ --input-type=commonjs är INTE valfritt: package.json säger
+        # "type": "module", så även node -e körs som ESM där require() saknas.
+        run: |
+          node --input-type=commonjs -e "
+            const fs = require('fs');
+            const rå = fs.readFileSync('./spec.json', 'utf8');
+            let s;
+            try { s = JSON.parse(rå); }
+            catch (e) {
+              console.error('Specen är inte giltig JSON:', e.message);
+              console.error('Första 300 tecknen:', rå.slice(0, 300));
+              process.exit(2);
+            }
+            if (!s.bilder || !s.bilder.length) { console.error('Specen saknar bilder'); process.exit(2); }
+            console.log('Spec OK:', s.bilder.length, 'bild(er),', rå.length, 'tecken');
+          "
+
+      # Ingen ffmpeg här — en stillbild passerar aldrig en videokodare.
+      - name: Rita bilderna
+        run: node bild.mjs spec.json
+
+      - name: Visa resultatet
+        run: ls -la ut/
+
+      - name: Ladda upp till wasafast.se
+        env:
+          VARD: ${{ secrets.SFTP_VARD }}
+          ANVANDARE: ${{ secrets.SFTP_ANVANDARE }}
+          LOSENORD: ${{ secrets.SFTP_LOSENORD }}
+        run: |
+          if [ -z "$VARD" ] || [ -z "$ANVANDARE" ] || [ -z "$LOSENORD" ]; then
+            echo "AVBROTT: en eller flera SFTP-secrets saknas eller är felstavade."
+            echo "Förväntade namn: SFTP_VARD, SFTP_ANVANDARE, SFTP_LOSENORD"
+            exit 2
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          # Alla JPG i ut/ läggs upp i samma session — en SFTP-uppkoppling
+          # för hela veckoserien i stället för en per bild.
+          {
+            echo "-mkdir /www/smail/some"
+            for f in ut/*.jpg; do
+              echo "put $f /www/smail/some/$(basename $f)"
+            done
+            echo "bye"
+          } > sftp-kommandon.txt
+          sshpass -p "$LOSENORD" sftp -o StrictHostKeyChecking=no -o BatchMode=no -b sftp-kommandon.txt "$ANVANDARE@$VARD"
+          for f in ut/*.jpg; do
+            echo "Uppladdad: https://wasafast.se/smail/some/$(basename $f)"
+          done
+
+      - name: Kvittera till n8n
+        if: ${{ inputs.kvittens != '' }}
+        run: |
+          URLAR=$(node --input-type=commonjs -e "
+            const fs=require('fs');
+            const b=JSON.parse(fs.readFileSync('ut/bilder.json','utf8')).bilder||[];
+            console.log(JSON.stringify(b.map(x=>'https://wasafast.se/smail/some/'+x.filnamn)));
+          ")
+          curl -sS -X POST "${{ inputs.kvittens }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"ok\":true,\"typ\":\"bild\",\"inlagg\":\"${{ inputs.inlagg }}\",\"filnamn\":\"${{ inputs.filnamn }}\",\"url\":\"https://wasafast.se/smail/some/${{ inputs.filnamn }}\",\"urlar\":$URLAR,\"korning\":\"${{ github.run_id }}\"}"
+
+      - name: Kvittera fel till n8n
+        if: ${{ failure() && inputs.kvittens != '' }}
+        run: |
+          curl -sS -X POST "${{ inputs.kvittens }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"ok\":false,\"typ\":\"bild\",\"inlagg\":\"${{ inputs.inlagg }}\",\"filnamn\":\"${{ inputs.filnamn }}\",\"korning\":\"${{ github.run_id }}\",\"logg\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
