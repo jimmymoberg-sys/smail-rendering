@@ -539,8 +539,80 @@
     ];
   }
 
+  /* ================= STILLBILD =================================
+   * En stillbild är ett foto med ett överlägg ovanpå — samma överlägg som
+   * filmen använder. Skillnaden är att fotot ritas HÄR i stället för av
+   * ffmpeg, så att en bild kan produceras utan att någon film renderas.
+   *
+   * ★ Bilden ritas med "cover": den fyller hela ytan och beskärs, med
+   *   blickpunkten fx/fy (0..1) som ankare. Aldrig förvrängd proportion.
+   */
+  function ritaFoto(ctx, bild, W, H, val) {
+    if (!bild) return false;
+    val = val || {};
+    var bw = bild.naturalWidth || bild.width;
+    var bh = bild.naturalHeight || bild.height;
+    if (!bw || !bh) return false;
+
+    var zoom = val.zoom || 1;
+    var skala = Math.max(W / bw, H / bh) * zoom;
+    var ritB = bw * skala, ritH = bh * skala;
+    var fx = (val.fx === undefined) ? 0.5 : klamp(val.fx, 0, 1);
+    var fy = (val.fy === undefined) ? 0.5 : klamp(val.fy, 0, 1);
+
+    var x = (W - ritB) * fx;
+    var y = (H - ritH) * fy;
+    ctx.drawImage(bild, Math.round(x), Math.round(y), Math.round(ritB), Math.round(ritH));
+    return true;
+  }
+
+  /*
+   * Ritar en FÄRDIG stillbild: foto underst, överlägg överst.
+   *
+   * ctx   — 2D-kontext
+   * bild  — laddad Image/ImageBitmap (null för kortroller)
+   * klipp — som ritaOverlagg
+   * spec  — som ritaOverlagg, plus { fx, fy, zoom }
+   *
+   * ★ Kortroller (faktakort/budskapskort/maklarkort) ritar sin egen
+   *   heltäckande bakgrund och behöver inget foto — då hoppas fotot över.
+   */
+  function ritaStillbild(ctx, bild, klipp, spec, W, H) {
+    klipp = klipp || {};
+    spec = spec || {};
+    ctx.clearRect(0, 0, W, H);
+
+    if (!arKort(klipp.roll)) {
+      var stil = slaIhop(STANDARD, spec.stil || {});
+      var fanns = ritaFoto(ctx, bild, W, H, {
+        fx: (klipp.fx === undefined ? spec.fx : klipp.fx),
+        fy: (klipp.fy === undefined ? spec.fy : klipp.fy),
+        zoom: klipp.zoom || spec.zoom || 1
+      });
+      /* Utan foto blir ytan svart i stället för genomskinlig — en JPG kan
+       * inte bära alfa, och en tom bild är ett tydligare fel än en vit. */
+      if (!fanns) {
+        ctx.fillStyle = stil.farger.rymd;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    ritaOverlagg(ctx, klipp, spec, W, H);
+  }
+
+  /* Målmåtten för ett format. En sanning — redigeraren och renderaren
+   * får aldrig räkna ut det var för sig. */
+  function matt(format) {
+    if (format === '1:1') return { bredd: 1080, hojd: 1080 };
+    if (format === '4:5') return { bredd: 1080, hojd: 1350 };
+    return { bredd: 1080, hojd: 1920 };
+  }
+
   var API = {
     ritaOverlagg: ritaOverlagg,
+    ritaStillbild: ritaStillbild,
+    ritaFoto: ritaFoto,
+    matt: matt,
     arKort: arKort,
     typsnittSomBehovs: typsnittSomBehovs,
     brytRader: brytRader,
