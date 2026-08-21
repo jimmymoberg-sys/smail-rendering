@@ -39,6 +39,7 @@
     toning:   { styrka: 1.0, start: 0.42 },
     ram:      { visa: true, marginal: 0.045, farg: 'rgba(230,222,211,0.38)' },
     fortskridning: { visa: true },
+    text:     { botten: 0.11 },
     logotyp:  { visa: true, hojd: 0.05, placering: 'nere-hoger' },
     kort:     { marginal: 0.10 }
   };
@@ -189,7 +190,7 @@
 
     // Byggs nerifrån och upp, så att en lång rubrik växer uppåt i stället för
     // att tryckas ut ur bild.
-    var y = H - Math.round(H * 0.11);
+    var y = H - Math.round(H * ((stil.text && stil.text.botten !== undefined) ? stil.text.botten : 0.11));
     var i, j;
 
     if (klipp.underrad) {
@@ -582,22 +583,30 @@
     spec = spec || {};
     ctx.clearRect(0, 0, W, H);
 
-    if (!arKort(klipp.roll)) {
-      var stil = slaIhop(STANDARD, spec.stil || {});
-      var fanns = ritaFoto(ctx, bild, W, H, {
-        fx: (klipp.fx === undefined ? spec.fx : klipp.fx),
-        fy: (klipp.fy === undefined ? spec.fy : klipp.fy),
-        zoom: klipp.zoom || spec.zoom || 1
-      });
-      /* Utan foto blir ytan svart i stället för genomskinlig — en JPG kan
-       * inte bära alfa, och en tom bild är ett tydligare fel än en vit. */
-      if (!fanns) {
-        ctx.fillStyle = stil.farger.rymd;
-        ctx.fillRect(0, 0, W, H);
-      }
+    var stil = slaIhop(STANDARD, spec.stil || {});
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+
+    /* ★★ ANROPA ALDRIG ritaOverlagg HÄRIFRÅN. Den börjar med clearRect och
+     * torkar bort fotot som just ritats — resultatet blir en svart ruta med
+     * text på, utan ett enda felmeddelande. Kortrollerna och fotoöverlägget
+     * anropas därför direkt. (Bevisad bugg 21 aug.) */
+    var kort = KORT[klipp.roll];
+    if (kort) { kort(ctx, klipp, spec, stil, W, H); return; }
+
+    var fanns = ritaFoto(ctx, bild, W, H, {
+      fx: (klipp.fx === undefined ? spec.fx : klipp.fx),
+      fy: (klipp.fy === undefined ? spec.fy : klipp.fy),
+      zoom: klipp.zoom || spec.zoom || 1
+    });
+    /* Utan foto blir ytan svart i stället för genomskinlig — en JPG kan
+     * inte bära alfa, och en tom bild är ett tydligare fel än en vit. */
+    if (!fanns) {
+      ctx.fillStyle = stil.farger.rymd;
+      ctx.fillRect(0, 0, W, H);
     }
 
-    ritaOverlagg(ctx, klipp, spec, W, H);
+    ritaFotooverlagg(ctx, klipp, spec, stil, W, H);
   }
 
   /* Målmåtten för ett format. En sanning — redigeraren och renderaren
